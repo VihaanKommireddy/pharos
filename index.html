@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Pharos — eyes</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: system-ui; }
+    #status { position: fixed; top: 12px; left: 12px; font-size: 15px;
+              background: rgba(0,0,0,.6); padding: 6px 10px; border-radius: 6px; }
+    canvas { display: block; max-width: 100vw; }
+  </style>
+</head>
+<body>
+
+<!-- The camera feed lands here. It's hidden — we never show the raw video,
+     we draw every frame onto the canvas below and paint dots on top of it. -->
+<video id="cam" autoplay playsinline muted style="display:none"></video>
+<canvas id="view"></canvas>
+<div id="status">loading…</div>
+
+<!-- These two script tags ARE the install. First one is TensorFlow.js, the
+     engine that runs AI models in the browser. Second is the pose-detection
+     library that knows how to load MoveNet. No server, no account, no key. -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2"></script>
+
+<script>
+const video  = document.getElementById('cam');
+const canvas = document.getElementById('view');
+const ctx    = canvas.getContext('2d');
+const status = document.getElementById('status');
+
+async function main() {
+  // 1. Load the AI. MoveNet MultiPose finds up to 6 people per frame,
+  //    17 joints each (nose, eyes, shoulders, elbows, wrists, hips, knees,
+  //    ankles). "Lightning" is the fast version — built for phones.
+  status.textContent = 'loading MoveNet…';
+  const detector = await poseDetection.createDetector(
+    poseDetection.SupportedModels.MoveNet,
+    { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING }
+  );
+
+  // 2. Ask for the camera. This is the permission popup.
+  status.textContent = 'model loaded — asking for camera…';
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: 1280, height: 720 }
+  });
+  video.srcObject = stream;
+  await new Promise(r => video.onloadedmetadata = r);
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  status.textContent = '';
+
+  // 3. The loop. Every frame: ask the model where the humans are,
+  //    draw the camera picture, put a green dot on every joint it
+  //    trusts more than 30%. Then do it again, forever.
+  async function frame() {
+    const poses = await detector.estimatePoses(video);
+    ctx.drawImage(video, 0, 0);
+
+    for (const pose of poses) {
+      for (const kp of pose.keypoints) {
+        if (kp.score > 0.3) {
+          ctx.beginPath();
+          ctx.arc(kp.x, kp.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = 'lime';
+          ctx.fill();
+        }
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+// If anything fails (camera blocked, no HTTPS, model won't load),
+// say so on screen instead of dying silently.
+main().catch(e => status.textContent = '⚠️ ' + e.message);
+</script>
+</body>
+</html>
