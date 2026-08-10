@@ -1,0 +1,10 @@
+{
+  "name": "Pharos",
+  "short_name": "Pharos",
+  "description": "Pool stillness alarm — runs entirely on your phone. Assists supervision, never replaces it.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#04121f",
+  "theme_color": "#04121f",
+  "icons": []
+}
