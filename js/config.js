@@ -34,6 +34,16 @@ export const CONFIG = {
   PROGRESS_EPS_TORSO: 0.8,      // less than this much travel (in torso-lengths) = "no progress"
   STRUGGLE_MOTION: 0.035,       // limb motion ABOVE this while vertical + no progress = struggle
 
+  // --- surface-struggle churn signature ---
+  // Grounded in Carballo-Fazanes & Bierens 2020 (24 real drownings on video):
+  // a drowning person submerges and resurfaces ~6x per 30s for up to ~2 min.
+  // On camera that is a track that BLINKS — repeated loss/reacquire cycles in
+  // one spot. Logged as a first-class signal; alarms only if deliberately enabled.
+  CHURN_WINDOW_S: 45,       // window over which loss/reacquire cycles are counted
+  CHURN_MIN_CYCLES: 3,      // this many cycles in one spot = surface-struggle flag
+  CHURN_RADIUS_TORSO: 3.0,  // "one spot" = within this many torso-lengths
+  CHURN_ALARMS: false,      // off by default: divers/handstand kids look similar
+
   // --- alarm ---
   ALARM_REBEEP_S: 3,        // siren repeats until acknowledged
   NTFY_REPEAT_S: 15,        // push re-sent until acknowledged (only if a topic is configured)

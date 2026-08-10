@@ -32,7 +32,7 @@ export class SessionLog {
         motion: p.motion === null || p.motion === undefined ? '' : +p.motion.toFixed(5),
         still_s: +p.stillS.toFixed(2),
         in_region: p.inRegion ? 1 : 0, near_edge: p.nearEdge ? 1 : 0,
-        struggle: p.struggle ? 1 : 0, state: p.state,
+        struggle: p.struggle ? 1 : 0, churn: p.churn ? 1 : 0, state: p.state,
       });
     }
   }

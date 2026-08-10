@@ -13,6 +13,7 @@ export class StillnessEngine {
     this.cfg = cfg;
     this.state = new Map();    // trackId -> per-track state
     this.lostRegistry = [];    // recently lost inside the zone, pending reacquire/alarm
+    this.churnEvents = [];     // loss->reacquire cycles (the IDR bobbing signature, Bug #5)
     this.alarms = [];          // every alarm ever raised this session
   }
 
@@ -31,6 +32,7 @@ export class StillnessEngine {
     const people = [];
     if (!this.zone) return { people, alarmsNow };
     dt = Math.min(Math.max(dt, 0.001), 0.5); // clamp: a hung tab must not add minutes
+    this.churnEvents = this.churnEvents.filter((e) => t - e.t <= cfg.CHURN_WINDOW_S);
 
     const seen = new Set();
     for (const tr of tracks) {
@@ -40,14 +42,23 @@ export class StillnessEngine {
       if (!st) {
         st = {
           prevRel: null, motionWin: [], stillS: 0, posHist: [],
-          struggle: false, alarmed: false,
+          struggle: false, churn: false, alarmed: false,
         };
-        this.state.set(tr.id, st);
         // Reacquire check: does this new track resurrect a lost one?
+        let inherited = null;
         this.lostRegistry = this.lostRegistry.filter((lost) => {
           const d = Math.hypot(lost.centroid.x - tr.centroid.x, lost.centroid.y - tr.centroid.y);
-          return d > lost.torso * cfg.REACQUIRE_DIST_TORSO; // keep only non-matches
+          if (!inherited && d <= lost.torso * cfg.REACQUIRE_DIST_TORSO) { inherited = lost; return false; }
+          return true;
         });
+        if (inherited) {
+          // BUG #5: the 2020 video study shows drowning people submerge and
+          // resurface repeatedly. A reappearance must INHERIT the stillness
+          // clock, not reset it — and each cycle is itself a signal.
+          st.stillS = inherited.stillS || 0;
+          this.churnEvents.push({ t, x: tr.centroid.x, y: tr.centroid.y });
+        }
+        this.state.set(tr.id, st);
       }
 
       // --- motion metric (§6.1 + §6.2) ---
@@ -104,6 +115,20 @@ export class StillnessEngine {
         st.struggle = !!(vertical && noProgress && highMotion);
       }
 
+      // --- surface-struggle churn flag (Bug #5 signature) ---
+      st.churn = false;
+      if (inRegion) {
+        const cycles = this.churnEvents.filter((e) =>
+          Math.hypot(e.x - tr.centroid.x, e.y - tr.centroid.y) <= tr.torso * cfg.CHURN_RADIUS_TORSO).length;
+        st.churn = cycles >= cfg.CHURN_MIN_CYCLES;
+        if (cfg.CHURN_ALARMS && st.churn && !st.alarmed) {
+          st.alarmed = true;
+          const alarm = { t, trackId: tr.id, trigger: 'surface_struggle', cycles, at: { ...tr.centroid } };
+          this.alarms.push(alarm);
+          alarmsNow.push(alarm);
+        }
+      }
+
       // --- near-edge threshold (§6.3, the wall problem) ---
       const edgeDist = distToPolygonEdge(tr.centroid, this.zone);
       const nearEdge = edgeDist <= tr.torso * cfg.EDGE_BUFFER_BODYLEN;
@@ -131,7 +156,7 @@ export class StillnessEngine {
       people.push({
         id: tr.id, x: tr.centroid.x, y: tr.centroid.y, torso: tr.torso,
         inRegion, nearEdge, motion: winMean, stillS: st.stillS,
-        struggle: st.struggle, state: tr.state, threshold,
+        struggle: st.struggle, churn: st.churn, state: tr.state, threshold,
       });
     }
 
@@ -141,7 +166,11 @@ export class StillnessEngine {
       const edgeDist = distToPolygonEdge(tr.centroid, this.zone);
       const nearExit = edgeDist <= tr.torso * this.cfg.EDGE_EXIT_BODYLEN;
       if (inRegion && !nearExit) {
-        this.lostRegistry.push({ trackId: tr.id, lostT: t, centroid: tr.centroid, torso: tr.torso, alarmed: false });
+        const prior = this.state.get(tr.id);
+        this.lostRegistry.push({
+          trackId: tr.id, lostT: t, centroid: tr.centroid, torso: tr.torso,
+          stillS: prior ? prior.stillS : 0, alarmed: false,
+        });
       }
       this.state.delete(tr.id);
     }

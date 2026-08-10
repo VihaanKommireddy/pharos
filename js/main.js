@@ -390,7 +390,7 @@ function renderTracksTable(people) {
     <td>${p.motion === null ? '…' : p.motion.toFixed(4)}</td>
     <td class="${p.stillS > p.threshold * 0.6 ? 'bad' : ''}">${p.stillS.toFixed(1)}</td>
     <td>${p.threshold}s${p.nearEdge ? ' (edge)' : ''}</td>
-    <td>${p.struggle ? '⚠ struggle' : ''}</td>
+    <td>${[p.struggle ? '⚠ struggle' : '', p.churn ? '⚠ bobbing' : ''].filter(Boolean).join(' ')}</td>
   </tr>`).join('');
 }
 function renderAlarmTable() {

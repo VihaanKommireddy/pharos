@@ -200,6 +200,51 @@ test('decay not reset: one twitch does not clear the counter', () => {
   assert.ok(still > 2, `counter must survive a twitch via decay; got ${still}`);
 });
 
+test('bug #5: stillness clock survives a submerge-resurface cycle', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  const fps = 15;
+  let still = 0;
+  for (let f = 0; f < 12 * fps; f++) {
+    const t = f / fps;
+    // still at the surface 0-4s, submerged 4-6.5s, resurfaces still 6.5s+
+    const visible = t < 4 || t >= 6.5;
+    const dets = visible ? [fakePose(300, 300, 50, 0, 3, t)] : [];
+    const { active, lostNow } = tr.update(dets, t);
+    const { people } = eng.update(active, lostNow, t, 1 / fps);
+    if (people.length) still = people[0].stillS;
+  }
+  // ~4s accumulated before submerging + ~5.5s after. A reset would leave ~5.5;
+  // inheritance should put us clearly above 7.
+  assert.ok(still > 7, `stillness clock must survive the dive; got ${still.toFixed(1)}`);
+});
+
+test('bug #5: repeated bobbing in one spot raises the churn flag and can alarm', () => {
+  _resetIds();
+  const cfgChurn = { ...CFG, CHURN_ALARMS: true, CHURN_MIN_CYCLES: 3 };
+  const tr = new Tracker(cfgChurn);
+  const eng = new StillnessEngine(cfgChurn);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  const fps = 15;
+  const alarms = [];
+  let churnSeen = false;
+  for (let f = 0; f < 40 * fps; f++) {
+    const t = f / fps;
+    // 5s cycle: 3s visible struggling, 2s submerged — the measured IDR pattern
+    const visible = (t % 5) < 3;
+    const dets = visible ? [fakePose(300, 300, 50, 8, 3, t)] : [];
+    const { active, lostNow } = tr.update(dets, t);
+    const res = eng.update(active, lostNow, t, 1 / fps);
+    alarms.push(...res.alarmsNow);
+    if (res.people.some((p) => p.churn)) churnSeen = true;
+  }
+  assert.ok(churnSeen, 'churn flag must raise after repeated cycles in one spot');
+  assert.ok(alarms.some((a) => a.trigger === 'surface_struggle'),
+    'with CHURN_ALARMS on, the bobbing pattern must alarm');
+});
+
 // --- demo scenario end-to-end ----------------------------------------------
 
 test('demo scenario: exactly the right people alarm', async () => {
