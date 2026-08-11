@@ -34,6 +34,7 @@ let wakeLock = null;
 let demoStartMs = null;
 let lastLoopMs = 0;
 let hiddenAtMs = null;
+let testClipName = null;
 
 // BUG #2 (BUILD-LOG.md): requestAnimationFrame pauses in background tabs and
 // under a locked screen — a safety monitor must never freeze silently. This
@@ -170,18 +171,41 @@ $('startSource').onclick = async () => {
   sourceKind = $('source').value;
   $('startSource').disabled = true;
   try {
-    if (sourceKind === 'camera') {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, facingMode: 'environment' } });
+    if (sourceKind === 'camera' || sourceKind === 'screen') {
+      // Screen capture is Testing Ladder rung 1 without a physical camera:
+      // play rescue/swim footage in another tab, point Pharos at that tab.
+      const stream = sourceKind === 'camera'
+        ? await navigator.mediaDevices.getUserMedia({
+            video: { width: 1280, height: 720, facingMode: 'environment' } })
+        : await navigator.mediaDevices.getDisplayMedia({ video: true });
       video.srcObject = stream;
       await new Promise((r) => (video.onloadedmetadata = r));
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       // Review #16: a dead camera must never look like a calm pool.
       const track = stream.getVideoTracks()[0];
-      track.addEventListener('ended', () => noteSystemError('camera stream ended'));
-      track.addEventListener('mute', () => noteSystemError('camera muted by the OS'));
+      track.addEventListener('ended', () => noteSystemError(sourceKind + ' stream ended'));
+      track.addEventListener('mute', () => noteSystemError(sourceKind + ' muted by the OS'));
       video.addEventListener('pause', () => { video.play().catch(() => noteSystemError('video paused')); });
+      detector = await createRealDetector(video);
+      $('demoZone').style.display = 'none';
+    } else if (sourceKind === 'file') {
+      // Local clip — the measurement harness runs on it exactly like a live feed.
+      const file = await new Promise((resolve) => {
+        const inp = $('videoFile');
+        inp.onchange = () => resolve(inp.files[0] || null);
+        inp.click();
+      });
+      if (!file) throw new Error('no file chosen');
+      video.srcObject = null;
+      video.src = URL.createObjectURL(file);
+      video.loop = true;
+      video.muted = true;
+      await new Promise((r, j) => { video.onloadedmetadata = r; video.onerror = () => j(new Error('cannot decode this video')); });
+      await video.play();
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      testClipName = file.name;
       detector = await createRealDetector(video);
       $('demoZone').style.display = 'none';
     } else {
@@ -280,6 +304,7 @@ $('armBtn').onclick = async () => {
   log.start(new Date().toISOString());
   log.setMeta({
     source: sourceKind, detector: detector.label,
+    ...(testClipName ? { test_clip: testClipName } : {}),
     pool: $('metaPool').value || '(unnamed)',
     resolution: `${canvas.width}x${canvas.height}`,
     zone_points: zone.length, px_per_meter: pxPerMeter || 'unset',
@@ -367,7 +392,7 @@ async function renderLoop() {
     // Review #17: the camera's intrinsic resolution can change (rotation,
     // renegotiation) — the traced zone is in the OLD pixel space and every
     // in-region test would silently go wrong. Escalate, don't guess.
-    if (sourceKind === 'camera' && video.videoWidth && video.videoWidth !== canvas.width) {
+    if ((sourceKind === 'camera' || sourceKind === 'screen') && video.videoWidth && video.videoWidth !== canvas.width) {
       noteSystemError(`camera resolution changed (${video.videoWidth}x${video.videoHeight}) — re-trace needed`);
       return;
     }

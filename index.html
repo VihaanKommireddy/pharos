@@ -90,8 +90,11 @@
       <h2>2 · Source</h2>
       <select id="source">
         <option value="camera">Live camera</option>
+        <option value="screen">Screen capture (test against a video playing in another tab)</option>
+        <option value="file">Video file (mp4/webm from this device)</option>
         <option value="demo">Demo scenario (no camera needed)</option>
       </select>
+      <input type="file" id="videoFile" accept="video/*" style="display:none">
       <button id="startSource">Start source</button>
     </div>
 
