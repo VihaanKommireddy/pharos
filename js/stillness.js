@@ -42,23 +42,43 @@ export class StillnessEngine {
       if (!st) {
         st = {
           prevRel: null, motionWin: [], stillS: 0, posHist: [],
-          struggle: false, churn: false, alarmed: false,
+          noiseFloor: null, struggle: false, churn: false, alarmed: false,
         };
         // Reacquire check: does this new track resurrect a lost one?
-        let inherited = null;
-        this.lostRegistry = this.lostRegistry.filter((lost) => {
+        // Review #7/#9: match the NEAREST recent entry, never the first-inserted —
+        // a bystander's flicker must not consume (and cancel) a submerged
+        // victim's pending alarm, and stale entries must not hand their
+        // stillness clock to an unrelated swimmer arriving later.
+        let best = null, bestD = Infinity;
+        for (const lost of this.lostRegistry) {
+          if (t - lost.lostT > cfg.REACQUIRE_MAX_AGE_S) continue;
           const d = Math.hypot(lost.centroid.x - tr.centroid.x, lost.centroid.y - tr.centroid.y);
-          if (!inherited && d <= lost.torso * cfg.REACQUIRE_DIST_TORSO) { inherited = lost; return false; }
-          return true;
-        });
-        if (inherited) {
+          if (d <= lost.torso * cfg.REACQUIRE_DIST_TORSO && d < bestD) { best = lost; bestD = d; }
+        }
+        if (best) {
+          this.lostRegistry = this.lostRegistry.filter((l) => l !== best);
           // BUG #5: the 2020 video study shows drowning people submerge and
           // resurface repeatedly. A reappearance must INHERIT the stillness
           // clock, not reset it — and each cycle is itself a signal.
-          st.stillS = inherited.stillS || 0;
+          st.stillS = best.stillS || 0;
           this.churnEvents.push({ t, x: tr.centroid.x, y: tr.centroid.y });
         }
         this.state.set(tr.id, st);
+      }
+
+      // Review #10: a ghost track carries the frozen keypoints of its last real
+      // detection. Frozen pose = zero apparent motion = fake stillness. Hold
+      // every clock while unobserved — accumulate nothing, decay nothing.
+      // Finding #20: the same hold applies when frames arrive too far apart —
+      // undersampled churn aliases into fake stillness (seen live at ~1fps).
+      if (tr.fresh === false || dt > cfg.MAX_METRIC_DT) {
+        people.push({
+          id: tr.id, x: tr.centroid.x, y: tr.centroid.y, torso: tr.torso,
+          inRegion: pointInPolygon(tr.centroid, this.zone), nearEdge: false,
+          motion: null, stillS: st.stillS, noise: st.noiseFloor,
+          struggle: st.struggle, churn: st.churn, state: tr.state, threshold: cfg.BASE_ALARM_S,
+        });
+        continue;
       }
 
       // --- motion metric (§6.1 + §6.2) ---
@@ -77,7 +97,10 @@ export class StillnessEngine {
             n++;
           }
         }
-        if (n >= 3) motion = sum / n;
+        // Review #6: divide by dt — the metric is torso-lengths per SECOND,
+        // so the same physical motion scores the same at any frame rate.
+        const rateDt = Math.min(Math.max(dt, 0.02), 0.5);
+        if (n >= 3) motion = sum / n / rateDt;
       }
       st.prevRel = rel;
 
@@ -90,9 +113,23 @@ export class StillnessEngine {
         ? st.motionWin.reduce((s, e) => s + e.motion, 0) / st.motionWin.length
         : null;
 
+      // Review #15 (the critical one): a fixed threshold calibrated on synthetic
+      // data can sit below a real camera's keypoint-noise floor, making the
+      // stillness alarm silently unreachable. Track a decaying MINIMUM of each
+      // person's own window-mean — their observed noise floor — and set the
+      // effective threshold at max(base, floor x multiplier). A noisy camera
+      // raises the bar instead of pinning the counter at zero forever.
+      if (winMean !== null) {
+        st.noiseFloor = st.noiseFloor === null
+          ? winMean
+          : Math.min(st.noiseFloor * (1 + cfg.NOISE_FLOOR_RECOVERY * dt), winMean);
+      }
+      const effStill = Math.max(cfg.STILL_THRESHOLD,
+        Math.min((st.noiseFloor || 0) * cfg.STILL_NOISE_MULT, cfg.STILL_ADAPTIVE_CAP));
+
       // --- stillness seconds, with decay not reset (§6.5) ---
       if (inRegion && winMean !== null) {
-        if (winMean < cfg.STILL_THRESHOLD) st.stillS += dt;
+        if (winMean < effStill) st.stillS += dt;
         else st.stillS = Math.max(0, st.stillS - cfg.DECAY_PER_S * dt);
       } else if (!inRegion) {
         st.stillS = 0; // on the deck: not our problem (Blueprint step 4)
@@ -144,7 +181,10 @@ export class StillnessEngine {
         this.alarms.push(alarm);
         alarmsNow.push(alarm);
       }
-      if (st.alarmed && st.stillS < threshold * 0.5) st.alarmed = false; // re-arm after real movement
+      // Review #12: re-arm only after the counter fully drains — comparing
+      // against the frame-local threshold let the near-edge flag flap the
+      // alarmed bit and re-fire forever on one continuously-still body.
+      if (st.alarmed && st.stillS === 0) st.alarmed = false;
 
       if (cfg.STRUGGLE_ALARMS && st.struggle && !st.alarmed && inRegion) {
         st.alarmed = true;
@@ -156,7 +196,8 @@ export class StillnessEngine {
       people.push({
         id: tr.id, x: tr.centroid.x, y: tr.centroid.y, torso: tr.torso,
         inRegion, nearEdge, motion: winMean, stillS: st.stillS,
-        struggle: st.struggle, churn: st.churn, state: tr.state, threshold,
+        noise: st.noiseFloor, struggle: st.struggle, churn: st.churn,
+        state: tr.state, threshold,
       });
     }
 

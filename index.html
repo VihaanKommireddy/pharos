@@ -140,9 +140,17 @@
   <div>
     <a id="call911" class="big" href="tel:911">CALL 911</a>
   </div>
-  <div>
+  <div id="ackRow">
     <button id="ackReal" class="big">Real event / staged</button>
     <button id="ackFalse" class="big">False alarm</button>
+  </div>
+  <div id="causeRow" style="display:none">
+    <p style="font-size:16px;margin:0 0 8px">False alarm — what caused it?</p>
+    <button class="big cause" data-cause="resting on wall">Wall</button>
+    <button class="big cause" data-cause="glare">Glare</button>
+    <button class="big cause" data-cause="handstand/play">Play</button>
+    <button class="big cause" data-cause="merged tracks">Merged</button>
+    <button class="big cause" data-cause="other">Other</button>
   </div>
   <p style="font-size:13px;opacity:.85;max-width:520px">Pharos assists supervision — it never replaces it.
      Eyes on the water first. The buttons label this alarm in the session log.</p>

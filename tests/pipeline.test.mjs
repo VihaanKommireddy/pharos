@@ -245,6 +245,133 @@ test('bug #5: repeated bobbing in one spot raises the churn flag and can alarm',
     'with CHURN_ALARMS on, the bobbing pattern must alarm');
 });
 
+// --- review-pass regression tests (findings #6-#19) --------------------------
+
+// Independent per-joint, per-frame noise — the shape of real detector jitter.
+function noisyPose(cx, cy, torso, jitterPx, seed, frame, churnPx = 0, t = 0) {
+  const p = fakePose(cx, cy, torso, churnPx, seed, t);
+  for (let i = 0; i < 17; i++) {
+    const r1 = Math.sin(seed * 31 + i * 17.3 + frame * 7.7) * jitterPx;
+    const r2 = Math.cos(seed * 47 + i * 11.9 + frame * 5.3) * jitterPx;
+    p.keypoints[i].x += r1; p.keypoints[i].y += r2;
+  }
+  return p;
+}
+
+test('review #15: still body with realistic detector noise STILL alarms (adaptive floor)', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  const fps = 15;
+  const alarms = [];
+  for (let f = 0; f < 30 * fps; f++) {
+    const t = f / fps;
+    const { active, lostNow } = tr.update([noisyPose(300, 300, 55, 1.5, 9, f)], t);
+    alarms.push(...eng.update(active, lostNow, t, 1 / fps).alarmsNow);
+  }
+  assert.ok(alarms.some((a) => a.trigger === 'stillness'),
+    'a motionless body under 1.5px keypoint noise must still alarm');
+});
+
+test('review #15: churning swimmer with the same noise never alarms (adaptive cap)', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  const fps = 15;
+  const alarms = [];
+  for (let f = 0; f < 30 * fps; f++) {
+    const t = f / fps;
+    const { active, lostNow } = tr.update([noisyPose(300 + Math.sin(t) * 30, 300, 55, 1.5, 9, f, 6, t)], t);
+    alarms.push(...eng.update(active, lostNow, t, 1 / fps).alarmsNow);
+  }
+  assert.equal(alarms.length, 0, 'constant churn must not read as still relative to itself');
+});
+
+test('review #10: ghost frames hold the clocks — no fake stillness from frozen keypoints', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  // Swim actively, then dropout with BIG dt ticks (throttled tab) during grace.
+  let still = -1;
+  for (let f = 0; f < 60; f++) tr.update([fakePose(300, 300, 50, 6, 3, f / 15)], f / 15);
+  let t = 4;
+  for (let g = 0; g < 10; g++) {
+    t += 1; // 1s per tick — grace lasts 10 wall-clock seconds at 1fps
+    const { active, lostNow } = tr.update([], t);
+    const { people } = eng.update(active, lostNow, t, 1);
+    if (people.length) still = people[0].stillS;
+  }
+  assert.ok(still <= 0.01, `ghost frames must not accumulate stillness; got ${still}`);
+});
+
+test('review #8: capped gate — a distant new detection does not get swallowed by a ghost', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  for (let f = 0; f < 10; f++) tr.update([fakePose(300, 300, 50, 6, 3, f / 15)], f / 15);
+  // 10 missed frames, then a detection 6 torso-lengths away (300px)
+  for (let f = 10; f < 20; f++) tr.update([], f / 15);
+  const { active } = tr.update([fakePose(600, 300, 50, 6, 4, 1.4)], 1.4);
+  // gate cap = 50 * 1.6 * 2.5 = 200px < 300px, so this must be a NEW track
+  assert.equal(active.length, 2, 'ghost plus new track must coexist — no swallow');
+});
+
+test('review #7: reacquire picks the NEAREST lost entry, and the other alarm still fires', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 900, y: 0 }, { x: 900, y: 600 }, { x: 0, y: 600 }], 40);
+  const fps = 15;
+  const alarms = [];
+  for (let f = 0; f < 20 * fps; f++) {
+    const t = f / fps;
+    const dets = [];
+    // Victim swims at (300,300) until t=3, then submerges for good.
+    if (t < 3) dets.push(fakePose(300, 300, 50, 6, 3, t));
+    // Bystander at (400,300) — inside victim's reacquire radius — flickers out
+    // 4-5s and comes back. Nearest-match must give the reborn track the
+    // BYSTANDER's entry, leaving the victim's pending alarm alive.
+    if (t < 4 || t >= 5) dets.push(fakePose(400, 300, 50, 6, 7, t));
+    const { active, lostNow } = tr.update(dets, t);
+    alarms.push(...eng.update(active, lostNow, t, 1 / fps).alarmsNow);
+  }
+  assert.ok(alarms.some((a) => a.trigger === 'track_lost'),
+    'the submerged victim\'s track_lost alarm must survive a bystander flicker');
+});
+
+test('review #12: one continuously still body raises exactly one stillness alarm', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  const fps = 15;
+  const alarms = [];
+  for (let f = 0; f < 60 * fps; f++) {
+    const t = f / fps;
+    const { active, lostNow } = tr.update([fakePose(300, 300, 50, 0, 3, t)], t);
+    alarms.push(...eng.update(active, lostNow, t, 1 / fps).alarmsNow);
+  }
+  assert.equal(alarms.filter((a) => a.trigger === 'stillness').length, 1,
+    'no re-fire loop while the same body stays still');
+});
+
+test('finding #20: throttled 1fps sampling never accumulates fake stillness', () => {
+  _resetIds();
+  const tr = new Tracker(CFG);
+  const eng = new StillnessEngine(CFG);
+  eng.setZone([{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }], 40);
+  const alarms = [];
+  for (let f = 0; f < 90; f++) {
+    const t = f * 1.0; // one frame per second — an aggressively throttled tab
+    const { active, lostNow } = tr.update([fakePose(300, 300, 50, 6, 3, t)], t);
+    alarms.push(...eng.update(active, lostNow, t, 1.0).alarmsNow);
+  }
+  assert.equal(alarms.length, 0,
+    'aliased low-fps churn must hold the clocks, not read as stillness');
+});
+
 // --- demo scenario end-to-end ----------------------------------------------
 
 test('demo scenario: exactly the right people alarm', async () => {

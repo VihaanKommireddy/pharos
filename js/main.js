@@ -40,20 +40,57 @@ let hiddenAtMs = null;
 // watchdog keeps the loop breathing (browsers throttle timers to ~1/s in
 // background, degraded but alive), and the visibility handler makes any gap
 // loud and logged instead of invisible.
+let errorStreak = 0;
+let systemFailed = false;
+
 setInterval(() => {
-  if (detector && !busy && performance.now() - lastLoopMs > 600) renderLoop();
+  const now = performance.now();
+  // Review #11: a detect() promise that never settles would wedge `busy` true
+  // forever — force-release after the timeout budget and count it as a failure.
+  if (busy && now - lastLoopMs > (CONFIG.DETECT_TIMEOUT_S * 1000 + 2000)) {
+    busy = false;
+    noteSystemError('detector hung');
+  }
+  if (detector && !busy && now - lastLoopMs > 600) renderLoop();
 }, 300);
 
-document.addEventListener('visibilitychange', () => {
+// Review #9: while armed, a failing pipeline must ESCALATE, not just relabel the
+// header — the operator sees red, hears the siren, and knows Pharos is blind.
+function noteSystemError(reason) {
+  errorStreak++;
+  if (armed && !systemFailed && errorStreak >= CONFIG.SYSTEM_ALARM_ERRORS) {
+    systemFailed = true;
+    setState('⚠ MONITORING FAILED — ' + reason, false);
+    $('startSource').disabled = false; // let the operator restart the source
+    const alarm = { t: lastT ?? 0, trackId: '-', trigger: 'system_failure', reason };
+    log?.logAlarm(alarm);
+    alarms?.raise(alarm);
+    renderAlarmTable();
+  }
+}
+function noteSystemRecovery() {
+  errorStreak = 0;
+  if (systemFailed) {
+    systemFailed = false;
+    if (armed) setState('ARMED — watching', true);
+  }
+}
+
+document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
     hiddenAtMs = performance.now();
-  } else if (hiddenAtMs !== null) {
-    const gapS = (performance.now() - hiddenAtMs) / 1000;
-    hiddenAtMs = null;
-    if (armed && gapS > 2) {
-      hint(`⚠ Monitoring was degraded for ${gapS.toFixed(0)}s while the app was in the background. ` +
-        'Keep Pharos in the foreground with the screen on.');
-      log?.setMeta({ ['gap_at_' + Math.round(performance.now() / 1000)]: gapS.toFixed(1) + 's_backgrounded' });
+  } else {
+    // Review #14: the OS releases the wake lock whenever the page hides —
+    // re-acquire it every time we come back, or the screen sleeps mid-session.
+    if (armed) { try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* optional */ } }
+    if (hiddenAtMs !== null) {
+      const gapS = (performance.now() - hiddenAtMs) / 1000;
+      hiddenAtMs = null;
+      if (armed && gapS > 2) {
+        hint(`⚠ Monitoring was degraded for ${gapS.toFixed(0)}s while the app was in the background. ` +
+          'Keep Pharos in the foreground with the screen on.');
+        log?.setMeta({ ['gap_at_' + Math.round(performance.now() / 1000)]: gapS.toFixed(1) + 's_backgrounded' });
+      }
     }
   }
 });
@@ -140,6 +177,11 @@ $('startSource').onclick = async () => {
       await new Promise((r) => (video.onloadedmetadata = r));
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+      // Review #16: a dead camera must never look like a calm pool.
+      const track = stream.getVideoTracks()[0];
+      track.addEventListener('ended', () => noteSystemError('camera stream ended'));
+      track.addEventListener('mute', () => noteSystemError('camera muted by the OS'));
+      video.addEventListener('pause', () => { video.play().catch(() => noteSystemError('video paused')); });
       detector = await createRealDetector(video);
       $('demoZone').style.display = 'none';
     } else {
@@ -246,11 +288,23 @@ $('armBtn').onclick = async () => {
   alarms.ntfyTopic = $('ntfyTopic').value.trim();
   alarms.onchange = (a) => {
     $('alarmOverlay').className = a ? 'show' : '';
+    $('ackRow').style.display = '';
+    $('causeRow').style.display = 'none';
     if (a) $('alarmMsg').textContent =
       a.trigger === 'track_lost'
         ? `Swimmer (track ${a.trackId}) disappeared underwater ${Math.round(a.lostForS || 0)}s ago and has not come back up.`
-        : `Swimmer (track ${a.trackId}) has not moved for ${Math.round(a.stillS || 0)} seconds.`;
+        : a.trigger === 'system_failure'
+          ? `PHAROS CANNOT SEE THE POOL — ${a.reason || 'pipeline failure'}. Eyes on the water NOW.`
+          : `Swimmer (track ${a.trackId}) has not moved for ${Math.round(a.stillS || 0)} seconds.`;
   };
+  errorStreak = 0; systemFailed = false;
+  // Audible confirmation at ARM — a user gesture unlocks the audio path, and a
+  // beep the operator doesn't hear means a siren they wouldn't have heard either.
+  if (!alarms.armTest()) hint('⚠ Audio test failed — the siren may be silent on this device. Fix sound before relying on Pharos.');
+  // Patent rule + review #18: the zone is immutable while armed — no re-trace
+  // under a running engine holding a stale polygon reference.
+  $('traceBtn').disabled = true; $('clearTrace').disabled = true;
+  $('demoZone').disabled = true; $('scaleBtn').disabled = true;
   armed = true;
   t0 = null; lastT = null;
   if (sourceKind === 'demo') demoStartMs = performance.now(); // demo replays from t=0 on arm
@@ -264,16 +318,23 @@ $('disarmBtn').onclick = () => {
   alarms?.acknowledge('unclear', 'disarmed');
   $('armBtn').disabled = false;
   $('disarmBtn').disabled = true;
+  $('traceBtn').disabled = false; $('clearTrace').disabled = !(zone && zone.length >= 3);
+  $('demoZone').disabled = false; $('scaleBtn').disabled = false;
   setState('disarmed');
   wakeLock?.release?.();
 };
 
 // ---------- alarm acknowledgement ----------
 $('ackReal').onclick = () => ackAlarm('true_positive');
+// Review #19: window.prompt() blocks the main thread — detection would stop
+// dead while the dialog sat open. Cause selection is now one non-blocking tap.
 $('ackFalse').onclick = () => {
-  const cause = prompt('Cause? (resting on wall / glare / handstand / merged tracks / other)', '') || '';
-  ackAlarm('false_positive', cause);
+  $('ackRow').style.display = 'none';
+  $('causeRow').style.display = '';
 };
+for (const btn of document.querySelectorAll('#causeRow .cause')) {
+  btn.onclick = () => ackAlarm('false_positive', btn.dataset.cause);
+}
 function ackAlarm(label, cause) {
   const acked = alarms.acknowledge(label, cause);
   if (acked && log) log.labelAlarm(acked, label, cause); // label by identity, not recency (Bug #3)
@@ -302,7 +363,21 @@ async function renderLoop() {
     const nowMs = performance.now();
     lastLoopMs = nowMs;
     const t = sourceKind === 'demo' ? (nowMs - demoStartMs) / 1000 : nowMs / 1000;
-    const dets = await detector.detect(t);
+
+    // Review #17: the camera's intrinsic resolution can change (rotation,
+    // renegotiation) — the traced zone is in the OLD pixel space and every
+    // in-region test would silently go wrong. Escalate, don't guess.
+    if (sourceKind === 'camera' && video.videoWidth && video.videoWidth !== canvas.width) {
+      noteSystemError(`camera resolution changed (${video.videoWidth}x${video.videoHeight}) — re-trace needed`);
+      return;
+    }
+
+    // Review #9/#11: a detect() call gets a hard deadline; past it, it failed.
+    const dets = await Promise.race([
+      detector.detect(t),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('detect timeout')), CONFIG.DETECT_TIMEOUT_S * 1000)),
+    ]);
+    noteSystemRecovery();
 
     // draw base
     if (sourceKind === 'camera') ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -375,7 +450,10 @@ async function renderLoop() {
       `${log.frames.length} rows · ${log.alarms.length} alarms · ` +
       `FA/hr: ${log.falseAlarmsPerHour() === null ? '—' : log.falseAlarmsPerHour().toFixed(2)}`;
   } catch (e) {
-    setState('error: ' + e.message);
+    // Review #9: while armed, errors escalate to a real alarm instead of
+    // being swallowed into a status label nobody is watching.
+    if (armed) noteSystemError(e.message);
+    else setState('error: ' + e.message);
   } finally {
     busy = false;
     requestAnimationFrame(renderLoop);

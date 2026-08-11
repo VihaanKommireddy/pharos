@@ -5,7 +5,21 @@
 export const CONFIG = {
   // --- stillness metric ---
   STILL_WINDOW_S: 10,       // rolling window the motion metric is averaged over
-  STILL_THRESHOLD: 0.012,   // mean normalized limb motion below this = "still"
+  // Review findings #6/#15: the metric is now torso-lengths per SECOND (was
+  // per-frame, which made it fps-dependent), and the effective threshold adapts
+  // to each track's own observed noise floor — a hardcoded cliff calibrated on
+  // synthetic data would make the stillness alarm unreachable on a noisy camera.
+  STILL_THRESHOLD: 0.18,    // base: mean normalized limb motion (torso/s) below this = "still"
+  STILL_NOISE_MULT: 1.6,    // effective threshold = max(base, min(noise floor x this, cap))
+  STILL_ADAPTIVE_CAP: 0.6,  // the adaptive part can never exceed this — a swimmer whose
+                            // "floor" is their own constant churn must not read as still.
+                            // If camera noise pushes past the cap, stillness detection is
+                            // degraded and the noise_floor CSV column makes that visible.
+  NOISE_FLOOR_RECOVERY: 0.05, // how fast the decaying-min noise floor relaxes upward (/s)
+  MAX_METRIC_DT: 0.25,      // finding #20: below ~4fps a swimmer's oscillating limbs ALIAS
+                            // into apparent stillness — frames farther apart than this hold
+                            // the stillness clocks instead of feeding the metric garbage.
+                            // (track-lost keeps working at any fps; it uses wall-clock time)
   BASE_ALARM_S: 15,         // stillness seconds before alarm, mid-pool
   EDGE_ALARM_S: 60,         // longer threshold near the wall (people rest there)
   EDGE_BUFFER_BODYLEN: 1.0, // "near the wall" = within this many torso-lengths of the traced edge
@@ -15,12 +29,20 @@ export const CONFIG = {
   // --- track-lost trigger (the submersion case, Blueprint §6.4) ---
   LOST_ALARM_S: 10,         // seconds a track can be missing (inside the zone) before alarm
   REACQUIRE_DIST_TORSO: 2.5,// a new track appearing within this distance of a lost one = same person
+  REACQUIRE_MAX_AGE_S: 12,  // review #7: only recent losses can be reacquired — an old entry
+                            // must not hand its stillness clock to an unrelated swimmer
   EDGE_EXIT_BODYLEN: 1.2,   // lost within this distance of the edge = probably climbed out, no alarm
 
   // --- tracker ---
   MAX_JUMP_TORSO: 1.6,      // max centroid move per frame, in torso-lengths (gate for matching)
   MAX_JUMP_PX_FLOOR: 48,    // absolute floor on the gate for tiny/far detections
   GRACE_FRAMES: 12,         // frames a track survives with no detection before counting as lost
+  GATE_GROWTH_CAP: 2.5,     // review #8: the per-miss gate growth is capped at this multiplier —
+                            // an aging ghost must not swallow a detection across the frame
+
+  // --- system watchdog (review #9-#11: the app must never LOOK armed while blind) ---
+  DETECT_TIMEOUT_S: 3,      // a detect() call that hasn't settled by now counts as failed
+  SYSTEM_ALARM_ERRORS: 3,   // consecutive failed frames while armed -> system-failure alarm
 
   // --- detection ---
   KEYPOINT_MIN_SCORE: 0.3,  // ignore joints the model trusts less than this
@@ -32,7 +54,7 @@ export const CONFIG = {
   VERT_RATIO: 1.35,             // keypoint bbox height/width above this = vertical posture
   PROGRESS_WINDOW_S: 5,         // window for forward-progress measurement
   PROGRESS_EPS_TORSO: 0.8,      // less than this much travel (in torso-lengths) = "no progress"
-  STRUGGLE_MOTION: 0.035,       // limb motion ABOVE this while vertical + no progress = struggle
+  STRUGGLE_MOTION: 0.5,         // limb motion (torso/s) ABOVE this while vertical + no progress = struggle
 
   // --- surface-struggle churn signature ---
   // Grounded in Carballo-Fazanes & Bierens 2020 (24 real drownings on video):

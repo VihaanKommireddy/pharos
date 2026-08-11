@@ -19,10 +19,35 @@ export class AlarmController {
     this.onchange = () => {};
   }
 
+  // Review #13: an AudioContext created outside a user gesture starts
+  // 'suspended' and the siren silently never plays. ensureAudio() is called
+  // from the ARM click (a real gesture) AND before every beep, resuming if
+  // needed — and armTest() plays an audible confirmation at arm time so a
+  // broken audio path is discovered before anyone is in the water.
+  ensureAudio() {
+    if (!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+    return this.audioCtx;
+  }
+
+  armTest() {
+    try {
+      const ctx = this.ensureAudio();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.26);
+      return true;
+    } catch (e) { return false; }
+  }
+
   _beep() {
     try {
-      if (!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const ctx = this.audioCtx;
+      const ctx = this.ensureAudio();
       const now = ctx.currentTime;
       // Two-tone siren burst, impossible to mistake for a notification chirp.
       for (let i = 0; i < 4; i++) {
@@ -52,6 +77,7 @@ export class AlarmController {
   raise(alarm) {
     if (this.activeAlarm) { this.queue.push(alarm); return; } // shown next, in order
     this.activeAlarm = { ...alarm, raisedAtMs: Date.now() };
+    try { navigator.vibrate?.([400, 150, 400, 150, 800]); } catch (e) { /* desktop */ }
     this._beep();
     this._beepTimer = setInterval(() => this._beep(), this.cfg.ALARM_REBEEP_S * 1000);
     const msg = `Pharos: ${alarm.trigger === 'track_lost' ? 'swimmer LOST from view' : 'swimmer STILL'} ` +

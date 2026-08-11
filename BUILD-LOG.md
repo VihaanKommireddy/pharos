@@ -55,6 +55,76 @@ lives). Two regression tests added.
 
 ---
 
+# Adversarial review pass (2026-08-10, 21 Opus agents, findings verified before acceptance)
+
+Three reviewers (correctness / algorithm / safety-UX) + one skeptic per finding.
+**16 findings confirmed, 1 refuted.** All confirmed findings fixed; each has a
+regression test where the pure pipeline can express it.
+
+## #6 — motion metric was per-FRAME, not per-second
+Same physical motion scored 12x differently across frame rates. Metric is now
+torso-lengths/second (`motion = Δ/n/dt`); all thresholds rescaled.
+
+## #15 (critical) — stillness threshold could sit below a real camera's noise floor
+The fixed threshold was calibrated against the demo's 0.22px synthetic jitter.
+A skeptic reproduced it against the real modules: ≥ ~1.5px of independent
+keypoint noise pins the stillness counter at exactly 0.0 forever — a face-down
+floater would never alarm, silently, with a healthy green skeleton on screen.
+**Fix:** each track keeps a decaying-minimum noise floor; effective threshold =
+max(base, min(floor×1.6, cap 0.6)). The cap stops a constantly-churning swimmer
+from reading as "still relative to themselves." The floor is logged per-frame in
+the CSV (`noise_floor`) so the cliff is visible in data, never invisible.
+
+## #7 — a bystander's flicker could cancel a submerged victim's pending alarm
+Reacquire matched the FIRST registry entry in insertion order. Now: nearest
+entry, within a 12s age window — and old entries can no longer hand their
+stillness clock to an unrelated swimmer arriving later.
+
+## #8 — uncapped matching gate let a ghost swallow detections across the frame
+Gate growth capped at 2.5×; a distant new detection now births a new track and
+the real lost event fires.
+
+## #10 — ghost tracks fed frozen keypoints back in as "perfectly still"
+Unobserved frames now hold every clock — no accumulation, no decay.
+
+## #9/#11 — a failing pipeline kept the ARMED badge green
+detect() now has a 3s deadline; three consecutive failures while armed raise a
+full `system_failure` alarm ("PHAROS CANNOT SEE THE POOL") instead of a status
+label nobody reads. A hung detect promise is force-released by the watchdog.
+
+## #16/#17 — dead camera / resolution change looked like a calm pool
+Stream `ended`/`mute` listeners, auto-resume on pause, and a per-frame
+resolution check (rotation invalidates the traced zone) all feed the same
+system-failure escalation.
+
+## #13 — the siren could be silently muted
+AudioContext is created/resumed inside the ARM tap (a real user gesture), an
+audible test beep plays at ARM (unheard beep = unfixed sound = don't trust the
+siren), and the phone vibrates on every alarm.
+
+## #12 — near-edge threshold flapping re-fired the same alarm forever
+Re-arm now requires the counter to fully drain. One still body = one alarm.
+
+## #14 — wake lock was never re-acquired after the OS released it
+Re-requested on every return to visibility while armed.
+
+## #18 — re-tracing while armed desynced the UI zone from the engine zone
+Trace/scale/zone controls are disabled while armed. Disarm to change the zone.
+
+## #19 — window.prompt() froze detection while the false-alarm dialog sat open
+Replaced with one-tap cause chips (Wall/Glare/Play/Merged/Other) on the overlay.
+
+## #20 — undersampled churn aliases into fake stillness (found live at ~1fps)
+Three false stillness alarms fired in a throttled tab — at 1fps an active
+swimmer's oscillating limbs are indistinguishable from noise. Frames farther
+apart than 250ms now hold the stillness clocks (track-lost is wall-clock based
+and unaffected). This is a physics limit, documented, not a tuning problem.
+
+**Refuted (1):** a claimed ARM-button dead-state on localStorage failure —
+the skeptic showed updateZoneUI() runs on every trace tap, so the state heals.
+
+---
+
 ## Verified working end to end (demo scenario, browser)
 - Preflight 7/7 · demo source · zone restore from localStorage · ARM gate held
   until zone exists (patent rule) · skeletons + IDs + per-person stillness

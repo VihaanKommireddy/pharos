@@ -30,6 +30,7 @@ export class SessionLog {
         t: +t.toFixed(3), session: this.sessionId, track: p.id,
         cx: Math.round(p.x), cy: Math.round(p.y), torso: +(p.torso || 0).toFixed(1),
         motion: p.motion === null || p.motion === undefined ? '' : +p.motion.toFixed(5),
+        noise_floor: p.noise === null || p.noise === undefined ? '' : +p.noise.toFixed(5),
         still_s: +p.stillS.toFixed(2),
         in_region: p.inRegion ? 1 : 0, near_edge: p.nearEdge ? 1 : 0,
         struggle: p.struggle ? 1 : 0, churn: p.churn ? 1 : 0, state: p.state,

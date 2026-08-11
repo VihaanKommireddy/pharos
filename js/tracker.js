@@ -33,7 +33,11 @@ export class Tracker {
     const pairs = [];
     const trackArr = [...this.tracks.values()];
     trackArr.forEach((tr, ti) => {
-      const gate = Math.max(cfg.MAX_JUMP_PX_FLOOR, tr.torso * cfg.MAX_JUMP_TORSO * (1 + tr.missed * 0.5));
+      // Gate grows while a track is missed (a resurfacing swimmer moved), but is
+      // CAPPED — review #8: an uncapped gate let an aging ghost swallow an
+      // unrelated detection half a frame away, so the real lost event never fired.
+      const growth = Math.min(1 + tr.missed * 0.5, cfg.GATE_GROWTH_CAP);
+      const gate = Math.max(cfg.MAX_JUMP_PX_FLOOR, tr.torso * cfg.MAX_JUMP_TORSO * growth);
       dets.forEach((d, di) => {
         const dist = Math.hypot(tr.centroid.x - d.centroid.x, tr.centroid.y - d.centroid.y);
         if (dist <= gate) pairs.push({ ti, di, dist });
@@ -52,6 +56,7 @@ export class Tracker {
       tr.missed = 0;
       tr.lastSeenT = t;
       tr.state = 'tracked';
+      tr.fresh = true; // a real observation this frame
     }
 
     // Unmatched detections become new tracks.
@@ -60,7 +65,7 @@ export class Tracker {
       const tr = {
         id: nextId++,
         centroid: d.centroid, keypoints: d.keypoints, torso: d.torso,
-        missed: 0, state: 'tracked', bornT: t, lastSeenT: t,
+        missed: 0, state: 'tracked', fresh: true, bornT: t, lastSeenT: t,
       };
       this.tracks.set(tr.id, tr);
     });
@@ -70,6 +75,8 @@ export class Tracker {
     trackArr.forEach((tr, ti) => {
       if (takenT.has(ti)) return;
       tr.missed++;
+      tr.fresh = false; // review #10: ghost frames carry STALE keypoints — the
+                        // engine must not read them as fresh (frozen pose = fake stillness)
       if (tr.missed <= cfg.GRACE_FRAMES) {
         tr.state = 'ghost'; // still alive, briefly undetected
       } else if (tr.state !== 'lost') {
