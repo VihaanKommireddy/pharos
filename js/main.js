@@ -35,6 +35,7 @@ let demoStartMs = null;
 let lastLoopMs = 0;
 let hiddenAtMs = null;
 let testClipName = null;
+let pendingClipUrl = null;  // set by ?clip= so the file source loads a served URL with no picker
 
 // BUG #2 (BUILD-LOG.md): requestAnimationFrame pauses in background tabs and
 // under a locked screen — a safety monitor must never freeze silently. This
@@ -193,21 +194,33 @@ $('startSource').onclick = async () => {
       $('demoZone').style.display = 'none';
     } else if (sourceKind === 'file') {
       // Local clip — the measurement harness runs on it exactly like a live feed.
-      const file = await new Promise((resolve) => {
-        const inp = $('videoFile');
-        inp.onchange = () => resolve(inp.files[0] || null);
-        inp.click();
-      });
-      if (!file) throw new Error('no file chosen');
+      // A served URL (via ?clip=) skips the picker so a whole run can be scripted;
+      // otherwise the operator picks a file.
+      let src;
+      if (pendingClipUrl) {
+        src = pendingClipUrl; testClipName = pendingClipUrl.split('/').pop();
+      } else {
+        const file = await new Promise((resolve) => {
+          const inp = $('videoFile');
+          inp.onchange = () => resolve(inp.files[0] || null);
+          inp.click();
+        });
+        if (!file) throw new Error('no file chosen');
+        src = URL.createObjectURL(file); testClipName = file.name;
+      }
       video.srcObject = null;
-      video.src = URL.createObjectURL(file);
+      video.src = src;
       video.loop = true;
       video.muted = true;
+      video.playsInline = true;
       await new Promise((r, j) => { video.onloadedmetadata = r; video.onerror = () => j(new Error('cannot decode this video')); });
-      await video.play();
+      // Do NOT hard-fail if the browser power-pauses a backgrounded clip — keep
+      // nudging it back to playing. (This was silently killing file runs when the
+      // tab wasn't foreground.)
+      video.play().catch(() => {});
+      video.addEventListener('pause', () => { if (!video.ended) video.play().catch(() => {}); });
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      testClipName = file.name;
       detector = await createRealDetector(video);
       $('demoZone').style.display = 'none';
     } else {
@@ -408,8 +421,12 @@ async function renderLoop() {
     noteSystemRecovery();
 
     // draw base
-    if (sourceKind === 'camera') ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    else { ctx.fillStyle = '#0a2a3f'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    // Draw the real frame under the skeletons for every live source (camera,
+    // screen capture, video file) — only the synthetic demo gets a flat fill.
+    // Without this the operator sees skeletons floating on blank blue and thinks
+    // it's broken, even though detection is running correctly on the video.
+    if (sourceKind === 'demo') { ctx.fillStyle = '#0a2a3f'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    else ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     // zone
     const zonePts = tracing || zone ? (tracing ? zone : zone) : null;
@@ -527,5 +544,24 @@ document.querySelector('header h1').innerHTML =
   `PHAROS <span style="font-size:11px;color:var(--dim)">v${VERSION}</span>`;
 document.title = `Pharos v${VERSION}`;
 renderPreflight();
-preflight();
+preflight().then(maybeAutoRun);
 setState('preflight…');
+
+// ?clip=<url>&autozone=1&autoarm=1 — load a served clip, optionally full-frame
+// zone + arm, no clicks. Lets a whole test run be scripted or one-click shared.
+async function maybeAutoRun() {
+  const p = new URLSearchParams(location.search);
+  const clip = p.get('clip');
+  if (!clip) return;
+  pendingClipUrl = clip;
+  $('source').value = 'file';
+  await new Promise((r) => setTimeout(r, 300));
+  await $('startSource').onclick();
+  if (p.get('autozone')) {
+    const W = canvas.width, H = canvas.height, m = 0.03;
+    zone = [{ x: W * m, y: H * m }, { x: W * (1 - m), y: H * m },
+            { x: W * (1 - m), y: H * (1 - m) }, { x: W * m, y: H * (1 - m) }];
+    updateZoneUI();
+  }
+  if (p.get('autoarm') && zone) $('armBtn').onclick();
+}
