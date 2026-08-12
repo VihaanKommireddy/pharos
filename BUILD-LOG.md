@@ -140,3 +140,34 @@ the skeptic showed updateZoneUI() runs on every trace tap, so the state heals.
   TV) then rungs 3–5 at a facility per SAFETY-PROTOCOL.md.
 - ntfy.sh push delivery on a second phone.
 - Thermal behavior on a phone (blueprint §2.2 warns of throttling).
+
+---
+
+# Findings from Vihaan's first real-user sessions (2026-08-11, from his exported CSVs)
+
+## #21 — render-loop chain multiplication (PROVEN from his data)
+His 49s demo session logged 34,373 rows for ONE track (~700 loop passes/sec),
+a 6.8MB CSV, and `operating_seconds=6` against 48.6 real seconds. Every
+watchdog-invoked pass was also scheduling an rAF continuation in `finally`, so
+chains accumulated. **Fix:** exactly one pending continuation may exist
+(`frameQueued` guard).
+
+## #22 — alarms raised in the engine never reached the log or siren (UNRESOLVED cause)
+In two of his sessions the demo floater exceeded the stillness threshold for
+20-37 seconds (condition verifiably true in the CSV: in-region, not near edge,
+motion under threshold) and the submerger vanished mid-pool — yet
+`alarms=0` was recorded and no overlay appeared. The same code, same scenario,
+same 700Hz regime fires both alarms correctly in two independent Node repros —
+the repo code cannot produce his data. Leading suspicion: stale/mixed cached
+modules (the page sat open across three same-evening pushes; python http.server
+sends no cache headers). **Mitigations shipped since it cannot be proven
+retroactively:** (a) VERSION constant shown in the header and stamped into every
+session export — a stale build is now visible at a glance and attributable in
+data; (b) an alarm-integrity reconciliation every armed frame — if the engine
+has ever raised more alarms than were delivered, that mismatch itself raises a
+system alarm. A silent alarm loss can no longer be silent.
+
+## Also confirmed working in his real sessions
+Tracker held IDs (ghost rate 0-0.4%), stillness inheritance and accumulation
+behaved, per-second motion units in sane ranges, in-region filtering correct,
+zone restore worked across three arm/disarm cycles in one page.

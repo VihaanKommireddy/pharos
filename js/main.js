@@ -6,7 +6,7 @@
 //   2. No auto-detect fallback of the pool region exists anywhere in this codebase.
 //   3. ARM stays disabled until the operator has defined the zone.
 
-import { CONFIG, DEMO_OVERRIDES } from './config.js';
+import { CONFIG, DEMO_OVERRIDES, VERSION } from './config.js';
 import { Tracker } from './tracker.js';
 import { StillnessEngine } from './stillness.js';
 import { SessionLog } from './logger.js';
@@ -43,6 +43,8 @@ let testClipName = null;
 // loud and logged instead of invisible.
 let errorStreak = 0;
 let systemFailed = false;
+let frameQueued = false;    // finding #21: exactly ONE render chain, ever
+let processedAlarms = 0;    // finding #22: alarms delivered to log+siren, reconciled vs engine
 
 setInterval(() => {
   const now = performance.now();
@@ -322,7 +324,8 @@ $('armBtn').onclick = async () => {
           ? `PHAROS CANNOT SEE THE POOL — ${a.reason || 'pipeline failure'}. Eyes on the water NOW.`
           : `Swimmer (track ${a.trackId}) has not moved for ${Math.round(a.stillS || 0)} seconds.`;
   };
-  errorStreak = 0; systemFailed = false;
+  errorStreak = 0; systemFailed = false; processedAlarms = 0;
+  log.setMeta({ app_version: VERSION });
   // Audible confirmation at ARM — a user gesture unlocks the audio path, and a
   // beep the operator doesn't hear means a siren they wouldn't have heard either.
   if (!alarms.armTest()) hint('⚠ Audio test failed — the siren may be silent on this device. Fix sound before relying on Pharos.');
@@ -430,7 +433,17 @@ async function renderLoop() {
       for (const alarm of res.alarmsNow) {
         log.logAlarm(alarm);
         alarms.raise(alarm);
+        processedAlarms++;
         renderAlarmTable();
+      }
+      // Finding #22: in a real session two triggers fired inside the engine and
+      // never reached the log or the siren — cause unreproduced (stale cache
+      // suspected). This reconciliation makes that class of failure LOUD: if the
+      // engine has ever raised more alarms than we delivered, that is itself an
+      // emergency.
+      if (engine.alarms.length > processedAlarms && !systemFailed) {
+        errorStreak = CONFIG.SYSTEM_ALARM_ERRORS;
+        noteSystemError(`alarm integrity: engine raised ${engine.alarms.length}, delivered ${processedAlarms}`);
       }
       // skeleton overlay from live tracks
       for (const tr of active) {
@@ -481,7 +494,13 @@ async function renderLoop() {
     else setState('error: ' + e.message);
   } finally {
     busy = false;
-    requestAnimationFrame(renderLoop);
+    // Finding #21: his exported session showed ~700 loop passes/sec — every
+    // watchdog-invoked pass was ALSO scheduling an rAF continuation, so chains
+    // multiplied. Exactly one pending continuation is allowed to exist.
+    if (!frameQueued) {
+      frameQueued = true;
+      requestAnimationFrame(() => { frameQueued = false; renderLoop(); });
+    }
   }
 }
 
@@ -504,6 +523,9 @@ function renderAlarmTable() {
 }
 
 // ---------- boot ----------
+document.querySelector('header h1').innerHTML =
+  `PHAROS <span style="font-size:11px;color:var(--dim)">v${VERSION}</span>`;
+document.title = `Pharos v${VERSION}`;
 renderPreflight();
 preflight();
 setState('preflight…');

@@ -1,3 +1,7 @@
+// Bumped on every push. Shown in the header and logged in every session file so
+// a stale cached build can never masquerade as current (finding #22).
+export const VERSION = '0.5.0';
+
 // Every tunable in the system lives here, per Blueprint §6.5:
 // "Every constant is a parameter, not a truth." All values are logged
 // into every session file so no number is ever published without its settings.
