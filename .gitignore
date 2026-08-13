@@ -1,1 +1,9 @@
 testdata/
+
+.venv/
+runs/
+pharos_ds/
+ds_*/
+*.onnx
+*.pt
+!yolo11n.pt
