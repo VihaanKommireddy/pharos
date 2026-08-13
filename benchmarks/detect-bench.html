@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pharos — detection benchmark</title>
+  <style>
+    body { margin:0; background:#04121f; color:#e8f1fa; font-family:system-ui,sans-serif; padding:16px; }
+    h1 { font-size:18px; }
+    #log { white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:13px;
+           background:#0a1f33; border:1px solid #1d3a57; border-radius:8px; padding:12px; margin-top:12px; }
+    canvas { max-width:100%; border:1px solid #1d3a57; border-radius:8px; margin-top:12px; }
+    a.dl { display:inline-block; margin-top:12px; background:#4aa8ff; color:#04121f; padding:8px 14px;
+           border-radius:6px; text-decoration:none; font-weight:600; }
+    .muted { color:#8fa9c2; }
+  </style>
+</head>
+<body>
+  <h1>Pharos detection benchmark</h1>
+  <p class="muted">Measures how well the detector sees people in a clip — the before/after
+    instrument for the fine-tune. Reads <code>?clip=&lt;url&gt;&amp;fps=6</code> and steps every
+    frame with a decode-wait (no seek race — the bug that once reported a false zero).
+    Add <code>&amp;show=1</code> to draw frames + boxes while it runs.</p>
+  <div id="status" class="muted">loading…</div>
+  <canvas id="view" width="640" height="360" style="display:none"></canvas>
+  <div id="log"></div>
+  <a id="dl" class="dl" style="display:none">Download JSON</a>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2"></script>
+  <script>
+  const q = new URLSearchParams(location.search);
+  const CLIP = q.get('clip');
+  const FPS = +(q.get('fps') || 6);
+  const SHOW = q.get('show');
+  const KP_MIN = 0.3, MIN_JOINTS = 5;
+  const $ = (id) => document.getElementById(id);
+  const say = (s) => { $('status').textContent = s; };
+  const logLine = (s) => { $('log').textContent += s + '\n'; };
+
+  // Wait until the seeked frame is actually presented — fixes the seek/decode
+  // race that made an earlier ad-hoc analyzer report 0 detections falsely.
+  function waitPainted(v) {
+    return new Promise((res) => {
+      let done = false; const fin = () => { if (!done) { done = true; res(); } };
+      if ('requestVideoFrameCallback' in v) v.requestVideoFrameCallback(() => fin());
+      setTimeout(fin, 150);
+    });
+  }
+
+  async function main() {
+    if (!CLIP) { say('add ?clip=<url> to the URL'); return; }
+    say('loading MoveNet…');
+    const det = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING });
+    const v = document.createElement('video');
+    v.src = CLIP; v.muted = true; v.crossOrigin = 'anonymous';
+    await new Promise((r, j) => { v.onloadedmetadata = r; v.onerror = () => j(new Error('cannot decode ' + CLIP)); });
+    const scale = Math.min(1, 1280 / v.videoWidth);
+    const W = Math.round(v.videoWidth * scale), H = Math.round(v.videoHeight * scale);
+    const cv = $('view'); cv.width = W; cv.height = H;
+    if (SHOW) cv.style.display = 'block';
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+
+    const R = { clip: CLIP.split('/').pop(), fps: FPS, dur: +v.duration.toFixed(1), res: W + 'x' + H,
+      frames: 0, detFrames: 0, totalPeople: 0, maxPeople: 0, maxScore: 0, blackFrames: 0,
+      byBin: {}, model: 'movenet-multipose-lightning' };
+    const N = Math.floor((v.duration - 0.1) * FPS);
+    say(`analyzing ${R.clip} — ${N} frames at ${FPS}fps…`);
+
+    for (let i = 0; i < N; i++) {
+      const t = i / FPS;
+      await new Promise((r) => { v.onseeked = r; v.currentTime = t; });
+      await waitPainted(v);
+      ctx.drawImage(v, 0, 0, W, H);
+      const px = ctx.getImageData(0, 0, 16, 9).data;
+      let lum = 0; for (let k = 0; k < px.length; k += 4) lum += (px[k] + px[k+1] + px[k+2]) / 3;
+      if (lum / (16 * 9) < 6) R.blackFrames++;
+      const poses = await det.estimatePoses(cv);
+      R.frames++;
+      let trusted = 0;
+      for (const p of poses) {
+        const kp = p.keypoints.filter((k) => k.score > KP_MIN);
+        if (kp.length >= MIN_JOINTS) trusted++;
+        const best = Math.max(...p.keypoints.map((k) => k.score));
+        if (best > R.maxScore) R.maxScore = +best.toFixed(2);
+        if (SHOW && kp.length >= MIN_JOINTS) {
+          ctx.strokeStyle = '#39d98a'; ctx.lineWidth = 2;
+          const xs = kp.map(k=>k.x), ys = kp.map(k=>k.y);
+          ctx.strokeRect(Math.min(...xs), Math.min(...ys), Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys));
+        }
+      }
+      if (trusted > 0) { R.detFrames++; R.totalPeople += trusted; }
+      if (trusted > R.maxPeople) R.maxPeople = trusted;
+      const bin = Math.floor(t / 10) * 10;
+      R.byBin[bin] = R.byBin[bin] || { f: 0, det: 0, maxPpl: 0 };
+      R.byBin[bin].f++; if (trusted > 0) R.byBin[bin].det++;
+      R.byBin[bin].maxPpl = Math.max(R.byBin[bin].maxPpl, trusted);
+      if (i % 20 === 0) say(`${R.clip}: ${t.toFixed(0)}/${R.dur}s · detFrames ${R.detFrames}/${R.frames}`);
+    }
+    v.remove();
+    R.detRate = R.frames ? +(R.detFrames / R.frames).toFixed(3) : 0;
+    R.avgPeople = R.frames ? +(R.totalPeople / R.frames).toFixed(2) : 0;
+
+    say(`DONE — ${R.clip}`);
+    logLine(JSON.stringify(R, null, 2));
+    const blob = new Blob([JSON.stringify(R, null, 2)], { type: 'application/json' });
+    const a = $('dl'); a.href = URL.createObjectURL(blob);
+    a.download = `bench-${R.clip}-${R.model}.json`; a.style.display = 'inline-block';
+  }
+  main().catch((e) => { say('ERROR: ' + e.message); logLine('ERROR: ' + e.message); });
+  </script>
+</body>
+</html>
