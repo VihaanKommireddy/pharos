@@ -1,0 +1,287 @@
+<title>Pharos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Deliberately single-theme: a dark pool at night, lit by one beam.
+     Every color is painted explicitly so the poster holds on any host ground. */
+  :root{
+    --abyss:#04121f;      /* deepest water — ground */
+    --deep:#0a2740;       /* mid water */
+    --deep2:#123a5c;      /* lit water */
+    --beam:#4aa8ff;       /* the accent — the app's blue, the lighthouse beam */
+    --caustic:#8fe3ff;    /* bright water-light */
+    --foam:#eef5fc;       /* cool near-white text */
+    --slate:#89a6c2;      /* muted secondary */
+    --alert:#ff5d5d;      /* the alarm — used once, on purpose */
+    --line:rgba(137,166,194,.22);
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--abyss);}
+  body{
+    font-family:var(--font-display);
+    color:var(--foam);
+    padding:28px 16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .poster{
+    width:100%;max-width:680px;margin:0 auto;
+    background:
+      radial-gradient(120% 55% at 82% -8%, rgba(74,168,255,.20), transparent 60%),
+      radial-gradient(90% 40% at 10% 108%, rgba(143,227,255,.08), transparent 60%),
+      linear-gradient(180deg,#061a2c 0%, var(--abyss) 55%, #030d17 100%);
+    border:1px solid var(--line);
+    border-radius:18px;
+    overflow:hidden;
+    position:relative;
+    box-shadow:0 40px 120px -40px rgba(0,0,0,.9);
+  }
+  /* faint depth grid, like a pool floor seen from above */
+  .poster::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:42px 42px;
+    -webkit-mask-image:radial-gradient(120% 90% at 50% 20%,#000 25%,transparent 78%);
+            mask-image:radial-gradient(120% 90% at 50% 20%,#000 25%,transparent 78%);
+    opacity:.35;
+  }
+  .pad{position:relative;padding:34px 34px 26px;}
+
+  /* ---- top rail ---- */
+  .rail{display:flex;justify-content:space-between;align-items:center;gap:12px;
+        font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;
+        text-transform:uppercase;color:var(--slate);}
+  .rail .dot{display:inline-block;width:6px;height:6px;border-radius:50%;
+        background:var(--beam);box-shadow:0 0 10px var(--beam);vertical-align:middle;margin-right:7px;}
+
+  /* ---- wordmark ---- */
+  .mark{margin-top:30px;position:relative;}
+  .mark h1{
+    font-size:clamp(58px,17vw,116px);
+    font-weight:800;letter-spacing:-.035em;line-height:.9;
+    background:linear-gradient(180deg,var(--foam),#a9cdf0 78%,#6f9dc7);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-wrap:balance;
+  }
+  .mark .beam{
+    position:absolute;top:-8px;right:-6px;width:150px;height:150px;
+    background:radial-gradient(circle at 70% 30%,rgba(143,227,255,.55),rgba(74,168,255,.12) 42%,transparent 68%);
+    filter:blur(2px);pointer-events:none;
+  }
+  .lede{
+    margin-top:16px;max-width:30ch;
+    font-size:clamp(17px,3.4vw,21px);line-height:1.45;color:#cfe0f1;font-weight:450;
+    text-wrap:balance;
+  }
+  .lede b{color:var(--foam);font-weight:650;}
+
+  /* ---- hero canvas ---- */
+  .stage{margin:26px 0 8px;border-radius:12px;overflow:hidden;
+         border:1px solid var(--line);position:relative;background:var(--deep);}
+  canvas{display:block;width:100%;height:auto;}
+  .stage .cap{position:absolute;left:12px;bottom:10px;
+        font-family:var(--font-mono);font-size:10.5px;letter-spacing:.12em;
+        text-transform:uppercase;color:rgba(238,245,252,.72);
+        background:rgba(4,18,31,.45);padding:4px 8px;border-radius:5px;backdrop-filter:blur(3px);}
+
+  /* ---- what it does ---- */
+  .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+        background:var(--line);border:1px solid var(--line);border-radius:12px;
+        overflow:hidden;margin-top:22px;}
+  .flow div{background:linear-gradient(180deg,rgba(18,58,92,.35),rgba(6,26,44,.35));padding:16px 14px;}
+  .flow .k{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;
+        text-transform:uppercase;color:var(--beam);}
+  .flow .v{margin-top:8px;font-size:13.5px;line-height:1.4;color:#d7e5f4;}
+
+  /* ---- differentiator stats ---- */
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px;}
+  .stat{border:1px solid var(--line);border-radius:12px;padding:16px 16px 15px;
+        background:radial-gradient(120% 100% at 0% 0%,rgba(74,168,255,.08),transparent 70%);}
+  .stat.big{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+  .stat .n{font-size:clamp(30px,7vw,44px);font-weight:800;letter-spacing:-.02em;
+        color:var(--foam);font-variant-numeric:tabular-nums;line-height:1;}
+  .stat .n.beam{color:var(--caustic);}
+  .stat .t{font-size:13px;line-height:1.4;color:var(--slate);}
+  .stat .t b{color:#d7e5f4;font-weight:600;}
+
+  /* ---- honest note ---- */
+  .honest{margin-top:22px;border-left:2px solid var(--beam);padding:4px 0 4px 16px;
+          font-size:13.5px;line-height:1.5;color:#c4d6e8;}
+  .honest b{color:var(--foam);}
+  .honest .alarm{color:var(--alert);font-weight:600;}
+
+  /* ---- footer ---- */
+  .foot{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+        display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+  .foot p{font-size:12.5px;line-height:1.5;color:var(--slate);max-width:42ch;}
+  .foot p b{color:#bcd2e6;}
+  .foot .sig{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;
+        text-transform:uppercase;color:var(--slate);text-align:right;white-space:nowrap;}
+
+  @media (max-width:460px){
+    .pad{padding:24px 20px 20px;}
+    .flow{grid-template-columns:1fr;}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;}}
+</style>
+
+<div class="poster">
+ <div class="pad">
+
+  <div class="rail">
+    <span><span class="dot"></span>Overhead pool-safety detection</span>
+    <span>Runs in a browser</span>
+  </div>
+
+  <div class="mark">
+    <div class="beam" aria-hidden="true"></div>
+    <h1>PHAROS</h1>
+    <p class="lede">A second set of eyes on the water — running on <b>a phone you already own</b>.</p>
+  </div>
+
+  <div class="stage">
+    <canvas id="pool" width="1224" height="720" role="img"
+      aria-label="Overhead view of a pool: swimmers moving through lanes while one swimmer holds still and is flagged by a detection ring."></canvas>
+    <span class="cap">Live view · one swimmer has stopped moving</span>
+  </div>
+
+  <div class="flow">
+    <div><div class="k">Watches</div><div class="v">Finds every person in the water and keeps track of each one, frame by frame.</div></div>
+    <div><div class="k">Notices</div><div class="v">Flags a swimmer who has gone still too long — or slipped under and not come back up.</div></div>
+    <div><div class="k">Alerts</div><div class="v">Sounds an alarm and lights the phone: <b style="color:#ff8a8a">check the water, now</b>.</div></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat big">
+      <span class="n">$1,269<span style="font-size:.5em;color:var(--slate)">–$1,299</span></span>
+      <span class="t">is what every rival charges for the camera and the box.<br><b>Pharos needs $0 beyond the phone in your pocket.</b></span>
+    </div>
+    <div class="stat">
+      <div class="n beam">10 → 0</div>
+      <div class="t" style="margin-top:9px">companies sell cameras that watch pools. <b>Not one publishes how often theirs fails.</b> We measure ours and publish the numbers.</div>
+    </div>
+    <div class="stat">
+      <div class="n">#1</div>
+      <div class="t" style="margin-top:9px">cause of death for U.S. children ages 1–4 is drowning. <b>It is silent and it is fast.</b><br><span style="font-size:11px;color:#6f8aa4">— CDC</span></div>
+    </div>
+  </div>
+
+  <p class="honest">
+    Pharos watches for <b>stillness</b> and <b>submersion</b> — not "drowning," which no camera can truly know.
+    It is a second pair of eyes for the lifeguard and the parent. It <b>assists supervision</b>;
+    it <span class="alarm">never</span> replaces it.
+  </p>
+
+  <div class="foot">
+    <p><b>Named for the lighthouse that watched the harbor.</b> A lighthouse doesn't rescue anyone — it watches without tiring, and tells someone who can.</p>
+    <div class="sig">Pharos · v0.5<br>a phone · a pool · an alarm</div>
+  </div>
+
+ </div>
+</div>
+
+<script>
+(function(){
+  const cv=document.getElementById('pool'), ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // pool basin inset in the frame
+  const P={x:70,y:60,w:W-140,h:H-120,r:28};
+  const lanes=5;
+  const swimmers=[];
+  for(let i=0;i<lanes;i++){
+    // one lane holds the STILL swimmer
+    const still = (i===2);
+    swimmers.push({
+      lane:i,
+      x: P.x + P.w*(0.15+0.6*Math.random()),
+      y: P.y + P.h*((i+0.5)/lanes),
+      dir: Math.random()<.5?1:-1,
+      spd: still?0:(0.9+Math.random()*0.7),
+      still, phase:Math.random()*6.28
+    });
+  }
+
+  function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  function drawWater(t){
+    // basin
+    const g=ctx.createLinearGradient(0,P.y,0,P.y+P.h);
+    g.addColorStop(0,'#0e355c'); g.addColorStop(1,'#0a2036');
+    ctx.save();roundRect(P.x,P.y,P.w,P.h,P.r);ctx.clip();
+    ctx.fillStyle=g;ctx.fillRect(P.x,P.y,P.w,P.h);
+    // lane lines
+    ctx.strokeStyle='rgba(143,227,255,.10)';ctx.lineWidth=2;
+    for(let i=1;i<lanes;i++){const y=P.y+P.h*i/lanes;
+      ctx.beginPath();ctx.moveTo(P.x,y);ctx.lineTo(P.x+P.w,y);ctx.stroke();}
+    // caustics — drifting light blobs
+    for(let i=0;i<9;i++){
+      const cx=P.x+((i*197+t*22*(i%2?1:-1))% (P.w+160))-80;
+      const cy=P.y+ (P.h*(i%5)/5) + Math.sin(t*0.5+i)*14 + P.h*0.1;
+      const rad=60+30*Math.sin(t*0.7+i*1.3);
+      const rg=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+      rg.addColorStop(0,'rgba(143,227,255,.10)');rg.addColorStop(1,'rgba(143,227,255,0)');
+      ctx.fillStyle=rg;ctx.fillRect(cx-rad,cy-rad,rad*2,rad*2);
+    }
+    ctx.restore();
+    // rim
+    ctx.strokeStyle='rgba(143,227,255,.30)';ctx.lineWidth=2.5;
+    roundRect(P.x,P.y,P.w,P.h,P.r);ctx.stroke();
+  }
+
+  function drawSwimmer(s,t){
+    // moving swimmers = short stroke marks; still one = compact body + ring
+    if(!s.still){
+      s.x += s.dir*s.spd* (reduce?0:2.4);
+      if(s.x>P.x+P.w-60){s.dir=-1;} if(s.x<P.x+60){s.dir=1;}
+      const wob=Math.sin(t*3+s.phase)*3;
+      ctx.save();ctx.translate(s.x,s.y+wob);ctx.rotate(s.dir>0?0:Math.PI);
+      ctx.fillStyle='rgba(207,224,241,.9)';
+      // head
+      ctx.beginPath();ctx.ellipse(14,0,7,7,0,0,6.29);ctx.fill();
+      // body streak
+      ctx.strokeStyle='rgba(207,224,241,.55)';ctx.lineWidth=8;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(8,0);ctx.lineTo(-22,0);ctx.stroke();
+      // arm stroke
+      ctx.strokeStyle='rgba(143,227,255,.5)';ctx.lineWidth=4;
+      ctx.beginPath();ctx.moveTo(-2,0);ctx.lineTo(-10,10*Math.sin(t*4+s.phase));ctx.stroke();
+      ctx.restore();
+    } else {
+      // still swimmer — face-down float, motionless
+      ctx.save();ctx.translate(s.x,s.y);
+      ctx.fillStyle='rgba(233,241,250,.92)';
+      ctx.beginPath();ctx.ellipse(0,0,9,9,0,0,6.29);ctx.fill();
+      ctx.strokeStyle='rgba(233,241,250,.5)';ctx.lineWidth=9;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(-4,0);ctx.lineTo(-30,0);ctx.stroke();
+      // splayed arms — the settle
+      ctx.lineWidth=4;ctx.strokeStyle='rgba(233,241,250,.4)';
+      ctx.beginPath();ctx.moveTo(-6,0);ctx.lineTo(-16,-13);ctx.moveTo(-6,0);ctx.lineTo(-16,13);ctx.stroke();
+      // detection ring — pulsing alert
+      const pulse = reduce?0.5:(0.5+0.5*Math.sin(t*3));
+      ctx.strokeStyle='rgba(255,93,93,'+(0.55+0.35*pulse)+')';
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(-12,0,30+6*pulse,0,6.29);ctx.stroke();
+      // label
+      ctx.fillStyle='rgba(255,93,93,.95)';
+      ctx.font='600 22px ui-monospace,Menlo,monospace';
+      ctx.fillText('STILL 15s',-12+40,-24);
+      ctx.restore();
+    }
+  }
+
+  function frame(ms){
+    const t=ms/1000;
+    ctx.clearRect(0,0,W,H);
+    // ground
+    ctx.fillStyle='#061a2c';ctx.fillRect(0,0,W,H);
+    drawWater(t);
+    swimmers.forEach(s=>drawSwimmer(s,t));
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  if(reduce){ frame(2100); } else { requestAnimationFrame(frame); }
+})();
+</script>
