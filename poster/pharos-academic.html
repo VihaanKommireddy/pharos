@@ -1,0 +1,300 @@
+<title>Pharos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Academic conference poster — light, print-style, single theme (committed).
+     Every colour painted explicitly so it holds on any host ground. */
+  :root{
+    --paper:#ffffff;
+    --wash:#f3f6fb;         /* column ground */
+    --ink:#0e2338;          /* near-navy text */
+    --ink-soft:#3f5f7f;     /* secondary */
+    --navy:#122d4d;         /* deep headings / number discs */
+    --accent:#2f6fed;       /* primary blue */
+    --accent-2:#4aa8ff;
+    --fill:#e7f0fe;         /* light-blue card fill */
+    --fill-line:#c3d8f7;
+    --alert:#d9483b;        /* used once */
+    --good:#127a53;
+    --rule:#d8e2ef;
+    --serif:Georgia,'Times New Roman',serif;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#e9edf3;}
+  body{font-family:var(--sans);color:var(--ink);padding:22px;-webkit-font-smoothing:antialiased;}
+  .poster{max-width:1480px;margin:0 auto;background:var(--paper);border:1px solid var(--rule);
+          border-radius:10px;overflow:hidden;box-shadow:0 30px 80px -40px rgba(10,30,60,.4);}
+  .pad{padding:26px 30px 30px;}
+
+  /* ---------- header ---------- */
+  header{display:grid;grid-template-columns:170px 1fr 130px;gap:20px;align-items:center;
+         padding-bottom:16px;border-bottom:2px solid var(--navy);}
+  .brand{display:flex;flex-direction:column;gap:8px;}
+  .chip{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--navy);
+        border:1.5px solid var(--navy);border-radius:6px;padding:5px 8px;text-align:center;line-height:1.1;}
+  .chip b{font-family:var(--sans);font-weight:800;font-size:15px;letter-spacing:.12em;}
+  .htitle{text-align:center;}
+  .htitle h1{font-family:var(--serif);font-size:clamp(30px,4.4vw,50px);font-weight:700;color:var(--ink);
+             letter-spacing:-.01em;line-height:1.02;text-wrap:balance;}
+  .htitle .sub{font-family:var(--serif);font-size:clamp(15px,1.9vw,21px);color:var(--ink-soft);
+               margin-top:4px;font-style:italic;}
+  .htitle .auth{font-size:14.5px;color:var(--ink);margin-top:10px;}
+  .htitle .affil{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .htitle .venue{color:var(--accent);font-weight:700;}
+  .qr{display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .qrbox{width:104px;height:104px;border:2px solid var(--navy);border-radius:8px;padding:7px;background:#fff;}
+  .qr .cap{font-size:10.5px;font-weight:700;color:var(--navy);text-align:center;line-height:1.15;}
+
+  /* ---------- columns ---------- */
+  main{display:grid;grid-template-columns:1fr 1fr 1.06fr;gap:22px;margin-top:20px;}
+  .col{display:flex;flex-direction:column;gap:16px;}
+  h2{font-family:var(--serif);font-size:23px;color:var(--navy);font-weight:700;
+     padding-bottom:5px;border-bottom:2px solid var(--accent);}
+  h3{font-size:14px;font-weight:800;color:var(--navy);}
+
+  .box{background:var(--fill);border:1px solid var(--fill-line);border-radius:10px;padding:14px 16px;}
+  .box p{font-size:14.5px;line-height:1.5;}
+  .box.lead p{font-size:15.5px;line-height:1.5;font-weight:500;}
+  .box b{color:var(--ink);font-weight:700;}
+
+  /* numbered contributions */
+  .contrib{display:flex;flex-direction:column;gap:11px;}
+  .item{display:grid;grid-template-columns:42px 1fr;gap:13px;align-items:start;
+        background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;}
+  .num{width:42px;height:42px;border-radius:50%;background:var(--navy);color:#fff;
+       display:grid;place-items:center;font-family:var(--serif);font-size:20px;font-weight:700;}
+  .item h3{margin-bottom:3px;}
+  .item p{font-size:13px;line-height:1.42;color:var(--ink-soft);}
+
+  p.body{font-size:14px;line-height:1.5;color:var(--ink);}
+  p.body b{color:var(--navy);}
+
+  /* pipeline flow */
+  .flow{display:flex;flex-direction:column;align-items:center;gap:0;}
+  .step{width:100%;background:var(--fill);border:1px solid var(--fill-line);border-radius:9px;
+        padding:10px 14px;text-align:center;}
+  .step .t{font-size:14px;font-weight:800;color:var(--navy);}
+  .step .d{font-size:12px;color:var(--ink-soft);margin-top:2px;line-height:1.35;}
+  .arrow{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
+         border-top:9px solid var(--accent-2);margin:5px 0;}
+
+  /* feature cards */
+  .feat{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .fcard{border:1px solid var(--rule);border-radius:9px;padding:11px 10px;background:var(--paper);}
+  .fcard svg{width:26px;height:26px;stroke:var(--accent);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .fcard .t{font-size:12.5px;font-weight:800;color:var(--navy);margin-top:6px;}
+  .fcard .d{font-size:11px;color:var(--ink-soft);margin-top:2px;line-height:1.3;}
+
+  /* results findings */
+  .find{display:flex;gap:11px;align-items:flex-start;}
+  .find .k{flex:0 0 26px;height:26px;border-radius:6px;background:var(--navy);color:#fff;
+           display:grid;place-items:center;font-size:14px;font-weight:800;}
+  .find .b{font-size:13.5px;line-height:1.44;}
+  .find .b b{color:var(--navy);}
+  .find.key .k{background:var(--alert);}
+
+  /* stage image */
+  .stage{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#0a2136;}
+  .stage canvas{display:block;width:100%;height:auto;}
+
+  /* chart */
+  .chart{border:1px solid var(--rule);border-radius:10px;padding:14px 16px 10px;background:var(--paper);}
+  .chart .ct{font-size:13px;font-weight:800;color:var(--navy);}
+  .bars{display:flex;align-items:flex-end;gap:20px;height:150px;margin:14px 6px 6px;border-bottom:2px solid var(--rule);}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+  .bar .fillbar{width:70%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,var(--accent-2),var(--accent));}
+  .bar .v{font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px;}
+  .bar .lab{font-size:11px;color:var(--ink-soft);margin-top:6px;text-align:center;line-height:1.2;}
+  .chart .note{font-size:11px;color:var(--ink-soft);margin-top:8px;line-height:1.35;}
+
+  .honest{border-left:3px solid var(--alert);background:#fdf3f2;border-radius:0 8px 8px 0;
+          padding:10px 14px;font-size:13px;line-height:1.5;color:var(--ink);}
+  .honest b{color:var(--navy);}
+  footer{margin-top:18px;padding-top:12px;border-top:1px solid var(--rule);
+         display:flex;justify-content:space-between;gap:16px;font-size:11.5px;color:var(--ink-soft);flex-wrap:wrap;}
+  footer .mono{font-family:var(--mono);}
+  @media (max-width:1000px){ main{grid-template-columns:1fr;} header{grid-template-columns:1fr;text-align:center} .qr,.brand{align-items:center} }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+
+<div class="poster"><div class="pad">
+
+  <header>
+    <div class="brand">
+      <div class="chip"><b>PHAROS</b></div>
+      <div class="chip">Runs in a<br>browser</div>
+      <div class="chip">$0 hardware</div>
+    </div>
+    <div class="htitle">
+      <h1>Pharos: Zero-Install Pool-Safety Detection on a Phone You Already Own</h1>
+      <div class="sub">Stillness &amp; submersion alerts, measured across real pools and published in the open</div>
+      <div class="auth">Vihaan Kommireddy</div>
+      <div class="affil">Independent student research &middot; Cary, North Carolina &middot; <span class="venue">Science-fair &amp; Congressional App Challenge 2026</span></div>
+    </div>
+    <div class="qr">
+      <div class="qrbox"><svg viewBox="0 0 90 90" width="100%" height="100%" aria-hidden="true">
+        <rect x="0" y="0" width="26" height="26" fill="none" stroke="#122d4d" stroke-width="6"/>
+        <rect x="10" y="10" width="6" height="6" fill="#122d4d"/>
+        <rect x="64" y="0" width="26" height="26" fill="none" stroke="#122d4d" stroke-width="6"/>
+        <rect x="74" y="10" width="6" height="6" fill="#122d4d"/>
+        <rect x="0" y="64" width="26" height="26" fill="none" stroke="#122d4d" stroke-width="6"/>
+        <rect x="10" y="74" width="6" height="6" fill="#122d4d"/>
+        <g fill="#122d4d">
+          <rect x="36" y="4" width="6" height="6"/><rect x="48" y="4" width="6" height="6"/>
+          <rect x="36" y="16" width="6" height="6"/><rect x="54" y="16" width="6" height="6"/>
+          <rect x="4" y="36" width="6" height="6"/><rect x="16" y="36" width="6" height="6"/>
+          <rect x="34" y="34" width="10" height="10"/><rect x="52" y="36" width="6" height="6"/>
+          <rect x="70" y="36" width="6" height="6"/><rect x="82" y="36" width="6" height="6"/>
+          <rect x="40" y="48" width="6" height="6"/><rect x="58" y="46" width="8" height="8"/>
+          <rect x="74" y="50" width="6" height="6"/><rect x="36" y="60" width="6" height="6"/>
+          <rect x="48" y="62" width="6" height="6"/><rect x="60" y="66" width="6" height="6"/>
+          <rect x="72" y="64" width="6" height="6"/><rect x="84" y="70" width="6" height="6"/>
+          <rect x="40" y="74" width="6" height="6"/><rect x="52" y="80" width="6" height="6"/>
+        </g></svg></div>
+      <div class="cap">Try the live demo</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= LEFT ================= -->
+    <div class="col">
+      <div>
+        <h2>Overview</h2>
+        <div class="box lead" style="margin-top:12px"><p>Every camera that watches a pool starts with a <b>$1,269&ndash;$1,299 hardware install</b>, and not one vendor publishes how often it fails. <b>Pharos runs on the phone in your pocket</b> &mdash; no install &mdash; and raises an alarm when a swimmer goes <b>still</b> too long or <b>slips under and does not resurface</b>. It is the first pool detector measured across many real pools, in the open.</p></div>
+      </div>
+
+      <div>
+        <h2>Key Contributions</h2>
+        <div class="contrib" style="margin-top:12px">
+          <div class="item"><div class="num">1</div><div><h3>Zero-install detection</h3><p>Runs in a browser on a phone families already own. No hardware, no mount, no calibration rig &mdash; the differentiator ten funded competitors cannot copy without cannibalizing their own product.</p></div></div>
+          <div class="item"><div class="num">2</div><div><h3>Measurable triggers, not &ldquo;distress&rdquo;</h3><p>Alarms on <b>stillness past a threshold</b> and a <b>track that submerges and never returns</b> &mdash; signals a camera can measure and a human can verify, never a subjective classifier.</p></div></div>
+          <div class="item"><div class="num">3</div><div><h3>First cross-pool benchmark</h3><p>An independent detection accuracy measured across multiple real pools and published &mdash; the number every vendor omits and no one else releases.</p></div></div>
+          <div class="item"><div class="num">4</div><div><h3>An honest negative result</h3><p>We show that off-the-shelf AI is blind to people in water &mdash; then fine-tune a detector to fix it, and publish the before/after.</p></div></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Problem &amp; Motivation</h2>
+        <p class="body" style="margin-top:12px">Drowning is fast, silent, and the <b>leading cause of death for U.S. children ages 1&ndash;4</b> (CDC); in a 1,537-case CPSC analysis, <b>80% of drowned toddlers were alone</b>. Ten companies in five countries sell AI pool cameras, but each is a fixed <b>$1,299 install tied to one pool</b>, and every &ldquo;99%&rdquo; claim is self-report with <b>no false-alarm rate, miss rate, or time-to-alert</b>. The people most exposed to drowning are the least able to buy the hardware &mdash; and no one can compare systems that publish nothing.</p>
+      </div>
+    </div>
+
+    <!-- ================= MIDDLE ================= -->
+    <div class="col">
+      <div>
+        <h2>Method</h2>
+        <div class="flow" style="margin-top:12px">
+          <div class="step"><div class="t">1 &middot; Overhead capture</div><div class="d">Phone browser + above-water camera; a 10-second finger-trace defines the water &mdash; no install.</div></div>
+          <div class="arrow"></div>
+          <div class="step"><div class="t">2 &middot; Person detection</div><div class="d">MoveNet MultiPose (TensorFlow.js) &mdash; up to 6 people, 17 keypoints each, on-device.</div></div>
+          <div class="arrow"></div>
+          <div class="step"><div class="t">3 &middot; Tracking</div><div class="d">Centroid + IoU tracker holds a stable ID per swimmer, with a grace window for dropouts.</div></div>
+          <div class="arrow"></div>
+          <div class="step"><div class="t">4 &middot; Motion signature</div><div class="d">Limb motion relative to each body&rsquo;s own centroid, torso-normalized &mdash; a drifting still body still reads as still.</div></div>
+          <div class="arrow"></div>
+          <div class="step"><div class="t">5 &middot; Triggers</div><div class="d">Stillness past N seconds (adaptive to camera noise) OR a track lost in the pool and not reacquired.</div></div>
+          <div class="arrow"></div>
+          <div class="step"><div class="t">6 &middot; Alert</div><div class="d">On-device siren + full-screen takeover + phone push + one-tap 911. Every frame logged to CSV.</div></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Key Features</h2>
+        <div class="feat" style="margin-top:12px">
+          <div class="fcard"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg><div class="t">Runs in a browser</div><div class="d">No app store, no install &mdash; the URL is the setup.</div></div>
+          <div class="fcard"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7z"/></svg><div class="t">On-device</div><div class="d">Video never leaves the phone; nothing uploaded.</div></div>
+          <div class="fcard"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><line x1="12" y1="13" x2="12" y2="9"/><line x1="9" y1="2" x2="15" y2="2"/></svg><div class="t">Stillness timer</div><div class="d">Counts seconds a swimmer stops moving.</div></div>
+          <div class="fcard"><svg viewBox="0 0 24 24"><path d="M2 15c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 10c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg><div class="t">Submersion trigger</div><div class="d">Fires when a track goes under and never returns.</div></div>
+          <div class="fcard"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg><div class="t">Measurement harness</div><div class="d">Per-frame + per-alarm CSV &mdash; the published numbers.</div></div>
+          <div class="fcard"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-3 2a11 11 0 005 5l2-3 5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg><div class="t">One-tap 911</div><div class="d">Prominent call button; never auto-dials.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= RIGHT ================= -->
+    <div class="col">
+      <div>
+        <h2>Results</h2>
+        <div class="stage" style="margin-top:12px">
+          <canvas id="pool" width="1000" height="440" role="img" aria-label="Overhead pool view: swimmers moving while one still swimmer is flagged."></canvas>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+          <div class="find"><div class="k">1</div><div class="b"><b>The pipeline works.</b> 22 unit tests pass; verified end-to-end in a browser on demo and live video at ~9&ndash;26 fps. The engineering is not the bottleneck.</div></div>
+          <div class="find key"><div class="k">2</div><div class="b"><b>Detector-blindness (key finding).</b> Across three real pools, stock MoveNet detected <b>0% of in-water swimmers</b> &mdash; a second model (COCO-SSD) agreed &mdash; while both found dry bodies on floats instantly. Night pool: 0 / 762 frames.</div></div>
+          <div class="find"><div class="k">3</div><div class="b"><b>Real rescue footage.</b> On fixed-camera pool CCTV of an actual child rescue, the submersion trigger fired &mdash; &ldquo;check the water.&rdquo;</div></div>
+        </div>
+      </div>
+
+      <div class="chart">
+        <div class="ct">In-water swimmer detection &mdash; stock pose model, per pool</div>
+        <div class="bars">
+          <div class="bar"><div class="v">1.4&times;</div><div class="fillbar" style="height:28%"></div><div class="lab">Floats<br>(dry bodies)</div></div>
+          <div class="bar"><div class="v">0</div><div class="fillbar" style="height:2%"></div><div class="lab">Lap pool</div></div>
+          <div class="bar"><div class="v">0</div><div class="fillbar" style="height:2%"></div><div class="lab">Night pool</div></div>
+          <div class="bar"><div class="v">?</div><div class="fillbar" style="height:60%;background:repeating-linear-gradient(45deg,#c3d8f7,#c3d8f7 6px,#e7f0fe 6px,#e7f0fe 12px);border:1px dashed var(--accent)"></div><div class="lab">Fine-tuned<br>(measuring)</div></div>
+        </div>
+        <div class="note">Stock models see dry bodies but not swimmers <b>in</b> the water. The fine-tuned detector&rsquo;s recall is the current before/after measurement (In-Water Swimmer Recall, per pool, with confidence intervals).</div>
+      </div>
+
+      <div>
+        <h2>Impact &amp; Future Work</h2>
+        <p class="body" style="margin-top:12px"><b>Now:</b> fine-tune a YOLO swimmer detector on licensed pool imagery and publish In-Water Swimmer Recall (stock vs. fine-tuned, per pool). <b>Next:</b> hand-label the team&rsquo;s own overhead pool footage to match a real mount, then measure across a YMCA, a hotel, and a neighborhood pool &mdash; the cross-pool number nobody else can produce.</p>
+        <div class="honest" style="margin-top:12px"><b>Pharos detects stillness and submersion &mdash; not &ldquo;drowning,&rdquo;</b> which no camera can truly know. It <b>assists</b> a lifeguard&rsquo;s or parent&rsquo;s supervision; it never replaces it.</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span><b>Pharos</b> &mdash; named for the lighthouse that watched the harbor. It doesn&rsquo;t rescue anyone; it watches without tiring and tells someone who can.</span>
+    <span class="mono">github.com/VihaanKommireddy/pharos</span>
+  </footer>
+
+</div></div>
+
+<script>
+(function(){
+  var cv=document.getElementById('pool'); if(!cv) return;
+  var ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var P={x:24,y:20,w:W-48,h:H-40};
+  var lanes=5, sw=[];
+  for(var i=0;i<lanes;i++){ sw.push({y:P.y+P.h*((i+0.5)/lanes), x:P.x+P.w*(0.2+0.6*(i/lanes)),
+    dir:i%2?1:-1, still:(i===2), ph:i*1.3}); }
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function frame(ms){
+    var t=ms/1000;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#0a2136';ctx.fillRect(0,0,W,H);
+    ctx.save();rr(P.x,P.y,P.w,P.h,16);ctx.clip();
+    var g=ctx.createLinearGradient(0,P.y,0,P.y+P.h);g.addColorStop(0,'#0e355c');g.addColorStop(1,'#0a2036');
+    ctx.fillStyle=g;ctx.fillRect(P.x,P.y,P.w,P.h);
+    ctx.strokeStyle='rgba(143,227,255,.10)';ctx.lineWidth=2;
+    for(var i=1;i<lanes;i++){var y=P.y+P.h*i/lanes;ctx.beginPath();ctx.moveTo(P.x,y);ctx.lineTo(P.x+P.w,y);ctx.stroke();}
+    for(var c=0;c<8;c++){var cx=P.x+((c*173+t*20*(c%2?1:-1))%(P.w+140))-70;var cy=P.y+(P.h*(c%5)/5)+Math.sin(t*.6+c)*12+P.h*.1;var rad=50+24*Math.sin(t*.7+c);var rg=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);rg.addColorStop(0,'rgba(143,227,255,.09)');rg.addColorStop(1,'rgba(143,227,255,0)');ctx.fillStyle=rg;ctx.fillRect(cx-rad,cy-rad,rad*2,rad*2);}
+    ctx.restore();
+    ctx.strokeStyle='rgba(143,227,255,.3)';ctx.lineWidth=2.5;rr(P.x,P.y,P.w,P.h,16);ctx.stroke();
+    sw.forEach(function(s){
+      if(!s.still){ s.x+=s.dir*(reduce?0:2.0); if(s.x>P.x+P.w-50)s.dir=-1; if(s.x<P.x+50)s.dir=1;
+        var wob=Math.sin(t*3+s.ph)*3;
+        ctx.save();ctx.translate(s.x,s.y+wob);ctx.rotate(s.dir>0?0:Math.PI);
+        ctx.fillStyle='rgba(207,224,241,.9)';ctx.beginPath();ctx.arc(12,0,6,0,6.29);ctx.fill();
+        ctx.strokeStyle='rgba(207,224,241,.55)';ctx.lineWidth=7;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(7,0);ctx.lineTo(-18,0);ctx.stroke();
+        ctx.strokeStyle='rgba(143,227,255,.5)';ctx.lineWidth=3.5;ctx.beginPath();ctx.moveTo(-2,0);ctx.lineTo(-9,9*Math.sin(t*4+s.ph));ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.save();ctx.translate(s.x,s.y);
+        ctx.fillStyle='rgba(233,241,250,.92)';ctx.beginPath();ctx.arc(0,0,8,0,6.29);ctx.fill();
+        ctx.strokeStyle='rgba(233,241,250,.5)';ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-4,0);ctx.lineTo(-26,0);ctx.stroke();
+        ctx.lineWidth=3.5;ctx.beginPath();ctx.moveTo(-6,0);ctx.lineTo(-15,-11);ctx.moveTo(-6,0);ctx.lineTo(-15,11);ctx.stroke();
+        var pulse=reduce?.5:(0.5+0.5*Math.sin(t*3));
+        ctx.strokeStyle='rgba(217,72,59,'+(0.6+0.3*pulse)+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(-10,0,26+5*pulse,0,6.29);ctx.stroke();
+        ctx.fillStyle='rgba(217,72,59,.95)';ctx.font='700 20px ui-monospace,Menlo,monospace';ctx.fillText('STILL 15s',24,-20);
+        ctx.restore();
+      }
+    });
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  if(reduce)frame(2000); else requestAnimationFrame(frame);
+})();
+</script>
